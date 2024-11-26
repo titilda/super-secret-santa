@@ -20,5 +20,5 @@ RUN apk add --no-cache gcc libffi-dev musl-dev && \
 
 FROM base as final
 COPY --from=builder /app/dist /app/dist
-RUN pip install /app/dist/*.whl
+RUN apk add postgresql-client && pip install /app/dist/*.whl
 CMD ["python", "-m", "super_secret_santa"]
