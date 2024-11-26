@@ -1,0 +1,9 @@
+[Discord]
+token=MY_DISCORD_BOT_TOKEN
+
+[Postgres]
+host=localhost
+port=5432
+user=supersecretsanta
+database=supersecretsanta
+password=supersecretsanta
