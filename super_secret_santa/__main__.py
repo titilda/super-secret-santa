@@ -1,12 +1,14 @@
 import discord
 import discord.ext.commands
 import psycopg.errors
-import asyncio
 from psycopg import AsyncCursor
-from random import shuffle
+from time import sleep
+
+# import asyncio
 
 import constants
 from config import config
+from secret_santa import secret_santa_algo
 from database import get_connection, connection_pool
 
 # TODO: manage graceful shutdown of the bot
@@ -23,10 +25,6 @@ async def create_santa_assignment(cur: AsyncCursor, guild_id: int, user_id: int,
         (giftee_id, user_id, guild_id),
     )
 
-    bot.get_user(user_id).send(
-        f"Your Secret Santa assignment is: {bot.get_user(giftee_id).mention()}. You can message them with `/santa message <message>`.",
-    )
-
 
 class CampaignView(discord.ui.View):
 
@@ -39,6 +37,19 @@ class CampaignView(discord.ui.View):
             try:
                 cur = conn.cursor()
                 await cur.advisory_lock(interaction.guild.id)
+
+                await cur.execute(
+                    "SELECT state FROM Campaigns WHERE guild_id = %s AND state = 'started';", (interaction.guild.id,)
+                )
+                started = await cur.fetchone()
+                if started:
+                    await interaction.response.send_message(
+                        "The campaign has already started. You cannot join now.",
+                        ephemeral=True,
+                        delete_after=constants.DELETE_AFTER_DELAY,
+                    )
+                    return
+
                 try:
                     await cur.execute(
                         "INSERT INTO Memberships (user_id, guild_id) VALUES (%s, %s);",
@@ -62,7 +73,7 @@ class CampaignView(discord.ui.View):
         await interaction.response.send_message(
             "You have joined the **Secret Santa campaign!**", ephemeral=True, delete_after=constants.DELETE_AFTER_DELAY
         )
-        print(f"User {interaction.user.nick} joined the campaign {interaction.message.id}")
+        print(f"User {interaction.user.global_name} joined the campaign {interaction.message.id}")
 
     @discord.ui.button(
         label="Leave Secret Santa!", custom_id="leave-sss", style=discord.ButtonStyle.danger, emoji="🎄"
@@ -73,7 +84,7 @@ class CampaignView(discord.ui.View):
             cur = conn.cursor()
             await cur.advisory_lock(interaction.guild.id)
             await cur.execute(
-                "SELECT is_organizer FROM Memberships WHERE user_id = %s AND guild_id = %s;",
+                "SELECT is_organizer FROM Memberships WHERE user_id = %s AND guild_id = %s AND is_organizer = TRUE;",
                 (interaction.user.id, interaction.guild.id),
             )
             is_organizer = await cur.fetchone()
@@ -87,11 +98,11 @@ class CampaignView(discord.ui.View):
 
             # if the campaign is already started, the user cannot leave
             await cur.execute(
-                "SELECT state FROM Campaigns WHERE guild_id = %s;",
+                "SELECT state FROM Campaigns WHERE guild_id = %s AND state = 'started';",
                 (interaction.guild.id,),
             )
-            state = await cur.fetchone()
-            if state == "started":
+            started = await cur.fetchone()
+            if started:
                 await interaction.response.send_message(
                     "The campaign has already started. You cannot leave now.",
                     ephemeral=True,
@@ -116,6 +127,8 @@ class CampaignView(discord.ui.View):
                 delete_after=constants.DELETE_AFTER_DELAY,
             )
 
+            print(f"User {interaction.user.global_name} left the campaign {interaction.message.id}")
+
     @discord.ui.button(
         label="Start Secret Santa!", custom_id="start-sss", style=discord.ButtonStyle.success, emoji="🎁"
     )
@@ -128,7 +141,7 @@ class CampaignView(discord.ui.View):
                 "SELECT user_id FROM Memberships WHERE guild_id = %s;",
                 (interaction.guild.id,),
             )
-            members = await cur.fetchall()
+            members: list[int] = [member[0] for member in await cur.fetchall()]
 
             if len(members) < 3:
                 if len(members) == 0:
@@ -144,7 +157,7 @@ class CampaignView(discord.ui.View):
 
             # only continue if the user is the organizer
             await cur.execute(
-                "SELECT is_organizer FROM Memberships WHERE user_id = %s AND guild_id = %s;",
+                "SELECT is_organizer FROM Memberships WHERE user_id = %s AND guild_id = %s AND is_organizer = TRUE;",
                 (interaction.user.id, interaction.guild.id),
             )
 
@@ -163,7 +176,7 @@ class CampaignView(discord.ui.View):
                 (interaction.guild.id,),
             )
             state = await cur.fetchone()
-            if state != "awaiting":
+            if state[0] != "awaiting":
                 await interaction.response.send_message(
                     "The campaign is not in the awaiting state!",
                     ephemeral=True,
@@ -181,39 +194,31 @@ class CampaignView(discord.ui.View):
                 ephemeral=False,
             )
 
-            await cur.execute(
-                "SELECT user_id FROM Memberships WHERE guild_id = %s;",
-                (interaction.guild.id,),
-            )
+            print(members)
 
-            members = await cur.fetchall()
-            people = members.copy()
-            shuffle(members)
+            # await create_santa_assignment(cur, interaction.guild.id, giver, receiver)
 
-            i = len(members) - 2
-            while i > 0:
-                giver = (people.pop(-1)[0],)
-                receiver = (members.pop(-1)[0],)
+            assignments = secret_santa_algo(members)
 
-                if giver == receiver:
-                    people.insert(-1, giver)
-                    members.insert(0, receiver)
-                    continue
+            for giver, receiver in assignments:
+                await create_santa_assignment(cur, interaction.guild.id, giver, receiver)
 
-                await create_santa_assignment(cur, interaction.guild.id, giver[0], receiver[0])
+            [
+                print(f"{(await bot.fetch_user(a[0])).global_name} -> {(await bot.fetch_user(a[1])).global_name}")
+                for a in assignments
+            ]
 
-                i -= 1
-
-            # last two people remaining:
-
-            if members[0] == people[0] or members[1] == people[1]:
-                # swap
-                members[0], members[1] = members[1], members[0]
-
-            await asyncio.gather(
-                create_santa_assignment(cur, interaction.guild.id, members[0][0], people[0][0]),
-                create_santa_assignment(cur, interaction.guild.id, members[1][0], people[1][0]),
-            )
+            for giver, receiver in assignments:
+                try:
+                    user = await bot.fetch_user(giver)
+                    await user.send(
+                        f"Your Secret Santa assignment is: {(await bot.fetch_user(receiver)).mention}. You can message them with `/santa message <message>`.",
+                    )
+                    print(f"Sent message to {user.id} ({user.global_name})")
+                except Exception as e:
+                    print("Could not send message to user:")
+                    print(e)
+                sleep(1)
 
 
 bot = discord.Bot()
@@ -223,6 +228,13 @@ santa_command_group = bot.create_group("santa", "Secret Santa commands")
 
 @santa_command_group.command()
 async def create(ctx: discord.ext.commands.Context, campaign_name: str):
+    if not ctx.guild:
+        await ctx.respond(
+            "This command can only be used in a server!",
+            ephemeral=True,
+            delete_after=constants.DELETE_AFTER_DELAY,
+        )
+        return
     async with get_connection() as conn:
         cur = conn.cursor()
         try:
@@ -250,7 +262,7 @@ async def create(ctx: discord.ext.commands.Context, campaign_name: str):
             )
 
             await ctx.respond(
-                f"Super Secret Santa campaign: **{campaign_name}**\nStarted by {ctx.author.mention}!",
+                f"Super Secret Santa campaign: **{campaign_name}**\nCreated by {ctx.author.mention}!",
                 view=CampaignView(),
             )
 
@@ -265,11 +277,18 @@ async def create(ctx: discord.ext.commands.Context, campaign_name: str):
 
 @santa_command_group.command()
 async def delete(ctx: discord.ext.commands.Context):
+    if not ctx.guild:
+        await ctx.respond(
+            "This command can only be used in a server!",
+            ephemeral=True,
+            delete_after=constants.DELETE_AFTER_DELAY,
+        )
+        return
     async with get_connection() as conn:
         cur = conn.cursor()
         await cur.advisory_lock(ctx.guild.id)
         await cur.execute(
-            "SELECT is_organizer FROM Memberships WHERE user_id = %s AND guild_id = %s;",
+            "SELECT is_organizer FROM Memberships WHERE user_id = %s AND guild_id = %s AND is_organizer = TRUE;",
             (ctx.author.id, ctx.guild.id),
         )
         is_organizer = await cur.fetchone()
@@ -323,7 +342,7 @@ async def message(ctx: discord.ext.commands.Context, message: str):
             case _:
                 message_to_send = "Please select one of the campaigns to send the message to with /santa messagex <number> <message>:\n"
                 for number, campaign in enumerate(campaigns, start=1):
-                    message_to_send += f"{number}. {campaign[2]} ({bot.get_user(campaign[1]).mention()})\n"
+                    message_to_send += f"{number}. {campaign[2]} ({(await bot.fetch_user(campaign[1])).mention})\n"
                 ctx.respond(
                     message_to_send,
                     ephemeral=True,
@@ -331,16 +350,16 @@ async def message(ctx: discord.ext.commands.Context, message: str):
                 )
                 return
 
-        await ctx.send(
-            f"Sending message to {bot.get_user(campaign[1].mention)} in the campaign **{campaign[2]}**...",
+        await ctx.respond(
+            f"Sending message to {((await bot.fetch_user(campaign[1])).mention)} in the campaign **{campaign[2]}**...",
             ephemeral=True,
         )
 
         # send the message to the user
-        user = bot.get_user(campaign[1])
+        user = await bot.fetch_user(campaign[1])
         try:
             await user.send(f"Your Secret Santa in campaign **{campaign[2]}** has sent you a message:\n{message}")
-            ctx.respond(
+            await ctx.respond(
                 "Message sent successfully!",
                 ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
@@ -381,22 +400,24 @@ async def messagex(ctx: discord.ext.commands.Context, number: int, message: str)
             )
             return
 
-        await ctx.send(
-            f"Sending message to {bot.get_user(campaign[1].mention)} in the campaign **{campaign[2]}**...",
+        await ctx.respond(
+            f"Sending message to {((await bot.fetch_user(campaign[1])).mention)} in the campaign **{campaign[2]}**...",
             ephemeral=False,
         )
 
         # send the message to the user
-        user = bot.get_user(campaign[1])
+        user = await bot.fetch_user(campaign[1])
         try:
-            await user.send(f"Your Secret Santa in campaign **{campaign[2]}** has sent you a message:\n{message}")
-            ctx.respond(
+            await user.send(
+                f"Your Secret Santa in campaign **{campaign[2]}** has sent you a message:\n{message.upper()}"
+            )
+            await ctx.respond(
                 "Message sent successfully!",
                 ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
             )
         except Exception:
-            ctx.respond(
+            await ctx.respond(
                 "Message could not be sent!",
                 ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
@@ -412,7 +433,7 @@ async def on_ready():
         "Add to your server: "
         "https://discord.com/oauth2/authorize?"
         f"client_id={bot.user.id}"
-        "&scope={constants.REQUIRED_SCOPES}"
+        f"&scope={constants.REQUIRED_SCOPES}"
         f"&permissions={constants.REQUIRED_PERMISSIONS}"
         "\n--------------------------------------------------\n"
     )
