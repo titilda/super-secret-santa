@@ -3,6 +3,7 @@ import discord.ext.commands
 import psycopg.errors
 from psycopg import AsyncCursor
 from time import sleep
+from loguru import logger
 
 # import asyncio
 
@@ -73,7 +74,7 @@ class CampaignView(discord.ui.View):
         await interaction.response.send_message(
             "You have joined the **Secret Santa campaign!**", ephemeral=True, delete_after=constants.DELETE_AFTER_DELAY
         )
-        print(f"User {interaction.user.global_name} joined the campaign {interaction.message.id}")
+        logger.info(f"User {interaction.user.global_name} joined the campaign {interaction.message.id}")
 
     @discord.ui.button(
         label="Leave Secret Santa!", custom_id="leave-sss", style=discord.ButtonStyle.danger, emoji="🎄"
@@ -127,7 +128,7 @@ class CampaignView(discord.ui.View):
                 delete_after=constants.DELETE_AFTER_DELAY,
             )
 
-            print(f"User {interaction.user.global_name} left the campaign {interaction.message.id}")
+            logger.info(f"User {interaction.user.global_name} left the campaign {interaction.message.id}")
 
     @discord.ui.button(
         label="Start Secret Santa!", custom_id="start-sss", style=discord.ButtonStyle.success, emoji="🎁"
@@ -194,8 +195,6 @@ class CampaignView(discord.ui.View):
                 ephemeral=False,
             )
 
-            print(members)
-
             # await create_santa_assignment(cur, interaction.guild.id, giver, receiver)
 
             assignments = secret_santa_algo(members)
@@ -203,8 +202,11 @@ class CampaignView(discord.ui.View):
             for giver, receiver in assignments:
                 await create_santa_assignment(cur, interaction.guild.id, giver, receiver)
 
+            logger.debug("Secret Santa assignments:")
             [
-                print(f"{(await bot.fetch_user(a[0])).global_name} -> {(await bot.fetch_user(a[1])).global_name}")
+                logger.debug(
+                    f"\t{(await bot.fetch_user(a[0])).global_name} -> {(await bot.fetch_user(a[1])).global_name}"
+                )
                 for a in assignments
             ]
 
@@ -214,11 +216,10 @@ class CampaignView(discord.ui.View):
                     await user.send(
                         f"Your Secret Santa assignment is: {(await bot.fetch_user(receiver)).mention}. You can message them with `/santa message <message>`.",
                     )
-                    print(f"Sent message to {user.id} ({user.global_name})")
+                    logger.debug(f"Sent message to {user.id} ({user.global_name})")
                 except Exception as e:
-                    print("Could not send message to user:")
-                    print(e)
-                sleep(1)
+                    logger.error(f"Could not send message to user:\n{e}")
+                sleep(0.5)
 
 
 bot = discord.Bot()
@@ -428,7 +429,7 @@ async def messagex(ctx: discord.ext.commands.Context, number: int, message: str)
 async def on_ready():
     await connection_pool.open()
     bot.add_view(CampaignView())
-    print(
+    logger.info(
         f"We have logged in as {bot.user}. "
         "Add to your server: "
         "https://discord.com/oauth2/authorize?"
