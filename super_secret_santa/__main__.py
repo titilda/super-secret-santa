@@ -6,10 +6,10 @@ from time import sleep
 
 # import asyncio
 
-import constants
-from config import config
-from secret_santa import secret_santa_algo
-from database import get_connection, connection_pool
+from . import constants
+from .config import config
+from .secret_santa import secret_santa_algo
+from .database import get_connection, connection_pool
 
 # TODO: manage graceful shutdown of the bot
 # from signal import signal, SIGINT

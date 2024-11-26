@@ -1,7 +1,7 @@
 import psycopg
 import psycopg_pool
 
-from config import config
+from .config import config
 
 # Monkey patch the advisory lock method into the async cursor
 psycopg.AsyncCursor.advisory_lock = lambda self, id: self.execute("SELECT pg_advisory_xact_lock(%s);", (id,))
