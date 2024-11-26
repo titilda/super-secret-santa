@@ -266,6 +266,7 @@ async def create(ctx: discord.ext.commands.Context, campaign_name: str):
                 f"Super Secret Santa campaign: **{campaign_name}**\nCreated by {ctx.author.mention}!",
                 view=CampaignView(),
             )
+            logger.info(f"User {ctx.author.global_name} created the campaign {campaign_name}")
 
         except psycopg.errors.UniqueViolation:
             await ctx.respond(
@@ -311,6 +312,7 @@ async def delete(ctx: discord.ext.commands.Context):
         ephemeral=True,
         delete_after=constants.DELETE_AFTER_DELAY,
     )
+    logger.info(f"User {ctx.author.global_name} deleted the campaign")
 
 
 @santa_command_group.command()
@@ -365,6 +367,7 @@ async def message(ctx: discord.ext.commands.Context, message: str):
                 ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
             )
+            logger.debug(f"Sent message to {user.id} ({user.global_name})")
         except Exception:
             ctx.respond(
                 "Message could not be sent!",
@@ -417,6 +420,8 @@ async def messagex(ctx: discord.ext.commands.Context, number: int, message: str)
                 ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
             )
+            logger.debug(f"Sent message to {user.id} ({user.global_name})")
+
         except Exception:
             await ctx.respond(
                 "Message could not be sent!",
