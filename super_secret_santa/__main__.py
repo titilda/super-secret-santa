@@ -91,7 +91,7 @@ class CampaignView(discord.ui.View):
             is_organizer = await cur.fetchone()
             if is_organizer:
                 await interaction.response.send_message(
-                    "You are the organizer. To delete the campaign, use /santa delete",
+                    "You are the organizer. To delete the campaign, use `/santa delete`",
                     ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
@@ -213,8 +213,9 @@ class CampaignView(discord.ui.View):
             for giver, receiver in assignments:
                 try:
                     user = await bot.fetch_user(giver)
+                    giftee = await bot.fetch_user(receiver)
                     await user.send(
-                        f"Your Secret Santa assignment is: {(await bot.fetch_user(receiver)).mention}. You can message them with `/santa message <message>`.",
+                        f"Your Secret Santa assignment is: {giftee.mention} ({giftee.global_name}). You can message them anonymously with `/santa message <message>`.",
                     )
                     logger.debug(f"Sent message to {user.id} ({user.global_name})")
                 except Exception as e:
@@ -343,7 +344,7 @@ async def message(ctx: discord.ext.commands.Context, message: str):
             case 1:
                 campaign = campaigns[0]
             case _:
-                message_to_send = "Please select one of the campaigns to send the message to with /santa messagex <number> <message>:\n"
+                message_to_send = "Please select one of the campaigns to send the message to with `/santa messagex <number> <message>`:\n"
                 for number, campaign in enumerate(campaigns, start=1):
                     message_to_send += f"{number}. {campaign[2]} ({(await bot.fetch_user(campaign[1])).mention})\n"
                 ctx.respond(
