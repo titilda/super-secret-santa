@@ -251,8 +251,12 @@ def setup():
             message = "Members of the campaign:\n"
 
             guild_members = [(await ctx.guild.fetch_member(member[0])) for member in members]
-            member_names = [member.nick if member.nick else member.global_name for member in guild_members]
-            member_names.sort()
+
+            member_names = sorted(
+                (member.nick if member.nick else member.global_name if member.global_name else "Unknown member")
+                for member in guild_members
+            )
+
             message += "\n".join([f"* {name}" for name in member_names])
 
             await ctx.respond(
