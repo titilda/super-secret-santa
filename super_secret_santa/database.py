@@ -1,32 +1,25 @@
 import psycopg
 import psycopg_pool
+from psycopg import AsyncCursor
 
 from .config import config
+
+
+async def create_santa_assignment(cur: AsyncCursor, guild_id: int, user_id: int, giftee_id: int):
+    await cur.execute(
+        """INSERT INTO Giftees (user_id, guild_id) VALUES (%s, %s);""",
+        (giftee_id, guild_id),
+    )
+    await cur.execute(
+        """UPDATE Memberships SET giftee = (select id from Giftees where user_id = %s) WHERE user_id = %s AND guild_id = %s;""",
+        (giftee_id, user_id, guild_id),
+    )
+
 
 # Monkey patch the advisory lock method into the async cursor
 psycopg.AsyncCursor.advisory_lock = lambda self, id: self.execute("SELECT pg_advisory_xact_lock(%s);", (id,))
 
-async_cursor_execute = psycopg.AsyncCursor.execute
-
-
-# multiple commands with placeholders
-# scientists were so preoccupied with whether or not they could, they didn't stop to think if they should
-# async def execute(self, *args, **kwargs):
-#     statements = args[0].split(";")
-#     placeholders = args[1:]
-
-#     placeholder_offset = 0
-
-#     for statement in statements:
-#         placeholder_count = statement.count("%s")
-#         await async_cursor_execute(
-#             self, statement, *(placeholders[placeholder_offset : (placeholder_count + placeholder_offset)]), **kwargs
-#         )
-#         placeholder_offset += placeholder_count
-
-
-# psycopg.AsyncCursor.execute = execute  # this is a crime against humanity
-
+# Connection string constructor for the database
 conninfo = psycopg.conninfo.make_conninfo(
     conninfo="",
     host=config.get("Postgres", "host"),
@@ -36,6 +29,8 @@ conninfo = psycopg.conninfo.make_conninfo(
     dbname=config.get("Postgres", "database"),
 )
 
+# Must be created inside main event loop
 connection_pool = psycopg_pool.AsyncConnectionPool(conninfo, open=False)
 
+# Shorthand for getting a connection from our connection pool
 get_connection = connection_pool.connection
