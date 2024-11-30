@@ -15,6 +15,7 @@ def setup():
 
     @santa_command_group.command()
     async def create(ctx: discord.ext.commands.Context, campaign_name: str):
+        """Create a new Secret Santa campaign"""
         if not ctx.guild:
             await ctx.respond(
                 "This command can only be used in a server!",
@@ -64,6 +65,7 @@ def setup():
 
     @santa_command_group.command()
     async def delete(ctx: discord.ext.commands.Context):
+        """Delete the current Secret Santa campaign on the server"""
         if not ctx.guild:
             await ctx.respond(
                 "This command can only be used in a server!",
@@ -101,6 +103,7 @@ def setup():
 
     @santa_command_group.command()
     async def message(ctx: discord.ext.commands.Context, message: str):
+        """Send a message to your giftee, whom you must get a gift for (NOT your Secret Santa)"""
         # we need to find out all started campaigns the Member is part of, where `giftee` is not NULL
         async with get_connection() as conn:
             cur = conn.cursor()
@@ -162,6 +165,7 @@ def setup():
     # TODO: merge message and messagex
     @santa_command_group.command()
     async def messagex(ctx: discord.ext.commands.Context, number: int, message: str):
+        """Send a message to your giftee, whom you must get a gift for (NOT your Secret Santa)"""
         # we need to find out all started campaigns the Member is part of, where `giftee` is not NULL
         async with get_connection() as conn:
             cur = conn.cursor()
