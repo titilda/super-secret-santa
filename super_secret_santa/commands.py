@@ -211,3 +211,46 @@ def setup():
                     ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
+
+    @santa_command_group.command()
+    async def list(ctx: discord.ext.commands.Context):
+        """List all members of the campaign"""
+        if not ctx.guild:
+            await ctx.respond(
+                "This command can only be used in a server!",
+                ephemeral=True,
+                delete_after=constants.DELETE_AFTER_DELAY,
+            )
+            return
+
+        async with get_connection() as conn:
+            cur = conn.cursor()
+            await cur.execute(
+                """
+                SELECT user_id
+                FROM Memberships
+                WHERE guild_id = %s;
+                """,
+                (ctx.guild.id,),
+            )
+            members = await cur.fetchall()
+
+            if not members:
+                await ctx.respond(
+                    "There are no members in the campaign!",
+                    ephemeral=True,
+                    delete_after=constants.DELETE_AFTER_DELAY,
+                )
+                # This should not really happen
+                return
+
+            message = "Members of the campaign:\n"
+
+            guild_members = [(await ctx.guild.fetch_member(member[0])) for member in members]
+            member_names = [member.nick if member.nick else member.global_name for member in guild_members]
+            member_names.sort()
+            message += "\n".join([f"* {name}" for name in member_names])
+
+            await ctx.respond(
+                message, ephemeral=True, delete_after=None  # (this takes longer to read than other messages)
+            )
