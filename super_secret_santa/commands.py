@@ -1,8 +1,7 @@
-import discord
-import discord.ext.commands
 import psycopg.errors
+from discord.commands.context import ApplicationContext
 from loguru import logger
-
+from datetime import datetime
 
 from . import constants
 from .bot import bot
@@ -14,12 +13,12 @@ def setup():
     santa_command_group = bot.create_group("santa", "Secret Santa commands")
 
     @santa_command_group.command()
-    async def create(ctx: discord.ext.commands.Context, campaign_name: str):
+    async def create(ctx: ApplicationContext, campaign_name: str):
+        await ctx.defer(ephemeral=True)
         """Create a new Secret Santa campaign"""
         if not ctx.guild:
-            await ctx.respond(
+            await ctx.followup.send(
                 "This command can only be used in a server!",
-                ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
             )
             return
@@ -49,27 +48,26 @@ def setup():
                     ),
                 )
 
-                await ctx.respond(
+                await ctx.channel.send(
                     f"Super Secret Santa campaign: **{campaign_name}**\nCreated by {ctx.author.mention}!",
                     view=CampaignView(),
                 )
                 logger.info(f"User {ctx.author.global_name} created the campaign {campaign_name}")
 
             except psycopg.errors.UniqueViolation:
-                await ctx.respond(
+                await ctx.followup.send(
                     "There is already a campaign on this server!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
                 return
 
     @santa_command_group.command()
-    async def delete(ctx: discord.ext.commands.Context):
+    async def delete(ctx: ApplicationContext):
         """Delete the current Secret Santa campaign on the server"""
+        await ctx.defer(ephemeral=True)
         if not ctx.guild:
-            await ctx.respond(
+            await ctx.followup.send(
                 "This command can only be used in a server!",
-                ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
             )
             return
@@ -82,9 +80,8 @@ def setup():
             )
             is_organizer = await cur.fetchone()
             if not is_organizer:
-                await ctx.respond(
+                await ctx.followup.send(
                     "You can only delete campaigns you have organized!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
                 return
@@ -94,16 +91,16 @@ def setup():
                 (ctx.guild.id,),
             )  # cascade delete of Memberships
 
-        await ctx.respond(
+        await ctx.followup.send(
             "The campaign has been deleted!",
-            ephemeral=True,
             delete_after=constants.DELETE_AFTER_DELAY,
         )
         logger.info(f"User {ctx.author.global_name} deleted the campaign")
 
     @santa_command_group.command()
-    async def message(ctx: discord.ext.commands.Context, message: str):
+    async def message(ctx: ApplicationContext, message: str):
         """Send a message to your giftee, whom you must get a gift for (NOT your Secret Santa)"""
+        await ctx.defer(ephemeral=True)
         # we need to find out all started campaigns the Member is part of, where `giftee` is not NULL
         async with get_connection() as conn:
             cur = conn.cursor()
@@ -121,9 +118,8 @@ def setup():
             campaigns = await cur.fetchall()
             match len(campaigns):
                 case 0:
-                    await ctx.respond(
+                    await ctx.followup.send(
                         "You are not part of any started campaigns!",
-                        ephemeral=True,
                         delete_after=constants.DELETE_AFTER_DELAY,
                     )
                     return
@@ -133,39 +129,36 @@ def setup():
                     message_to_send = "Please select one of the campaigns to send the message to with `/santa messagex <number> <message>`:\n"
                     for number, campaign in enumerate(campaigns, start=1):
                         message_to_send += f"{number}. {campaign[2]} ({(await bot.fetch_user(campaign[1])).mention})\n"
-                    ctx.respond(
+                    ctx.followup.send(
                         message_to_send,
-                        ephemeral=True,
                         delete_after=constants.DELETE_AFTER_DELAY,
                     )
                     return
 
-            await ctx.respond(
+            await ctx.followup.send(
                 f"Sending message to {((await bot.fetch_user(campaign[1])).mention)} in the campaign **{campaign[2]}**...",
-                ephemeral=True,
             )
 
             # send the message to the user
             user = await bot.fetch_user(campaign[1])
             try:
                 await user.send(f"Your Secret Santa in campaign **{campaign[2]}** has sent you a message:\n{message}")
-                await ctx.respond(
+                await ctx.followup.send(
                     "Message sent successfully!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
                 logger.debug(f"Sent message to {user.id} ({user.global_name})")
             except Exception:
-                ctx.respond(
+                ctx.followup.send(
                     "Message could not be sent!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
 
     # TODO: merge message and messagex
     @santa_command_group.command()
-    async def messagex(ctx: discord.ext.commands.Context, number: int, message: str):
+    async def messagex(ctx: ApplicationContext, number: int, message: str):
         """Send a message to your giftee, whom you must get a gift for (NOT your Secret Santa)"""
+        await ctx.defer(ephemeral=True)
         # we need to find out all started campaigns the Member is part of, where `giftee` is not NULL
         async with get_connection() as conn:
             cur = conn.cursor()
@@ -184,16 +177,15 @@ def setup():
             try:
                 campaign = campaigns[number - 1]
             except IndexError:
-                await ctx.respond(
+                await ctx.followup.send(
                     "Invalid number!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
                 return
 
-            await ctx.respond(
+            await ctx.followup.send(
                 f"Sending message to {((await bot.fetch_user(campaign[1])).mention)} in the campaign **{campaign[2]}**...",
-                ephemeral=False,
+                delete_after=constants.DELETE_AFTER_DELAY,
             )
 
             # send the message to the user
@@ -202,32 +194,31 @@ def setup():
                 await user.send(
                     f"Your Secret Santa in campaign **{campaign[2]}** has sent you a message:\n{message.upper()}"
                 )
-                await ctx.respond(
+                await ctx.followup.send(
                     "Message sent successfully!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
                 logger.debug(f"Sent message to {user.id} ({user.global_name})")
 
             except Exception:
-                await ctx.respond(
+                await ctx.followup.send(
                     "Message could not be sent!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
 
     @santa_command_group.command()
-    async def list(ctx: discord.ext.commands.Context):
+    async def list(ctx: ApplicationContext):
         """List all members of the campaign"""
+        await ctx.defer(ephemeral=True)
         if not ctx.guild:
-            await ctx.respond(
+            await ctx.followup.send(
                 "This command can only be used in a server!",
-                ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
             )
             return
 
         async with get_connection() as conn:
+            time_code = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             cur = conn.cursor()
             await cur.execute(
                 """
@@ -240,15 +231,14 @@ def setup():
             members = await cur.fetchall()
 
             if not members:
-                await ctx.respond(
+                await ctx.followup.send(
                     "There are no members in the campaign!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
                 )
                 # This should not really happen
                 return
 
-            message = "Members of the campaign:\n"
+            message = f"Members of the campaign as of {time_code}:\n"
 
             guild_members = [(await ctx.guild.fetch_member(member[0])) for member in members]
 
@@ -259,6 +249,14 @@ def setup():
 
             message += "\n".join([f"* {name}" for name in member_names])
 
-            await ctx.respond(
-                message, ephemeral=True, delete_after=None  # (this takes longer to read than other messages)
-            )
+            await ctx.followup.send(message, delete_after=None)  # (this takes longer to read than other messages)
+
+    @santa_command_group.command()
+    async def status(ctx: ApplicationContext):
+        """Show the bot status on the channel"""
+        await ctx.respond("Showing statistics now...")
+        server_count = len(bot.guilds)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await ctx.channel.send(
+            f"Bot is currently running on {server_count} server{"" if server_count == 1 else "s"}\nCurrent time: {current_time}",
+        )

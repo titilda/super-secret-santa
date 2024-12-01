@@ -1,5 +1,6 @@
 import discord
 import psycopg.errors
+from discord.interactions import Interaction
 from psycopg import AsyncCursor
 from loguru import logger
 from time import sleep
@@ -15,7 +16,8 @@ class CampaignView(discord.ui.View):
         super().__init__(timeout=None)  # persistent
 
     @discord.ui.button(label="Join Secret Santa!", custom_id="join-sss", style=discord.ButtonStyle.primary, emoji="🎅")
-    async def join_button_callback(self, button, interaction: discord.Interaction):
+    async def join_button_callback(self, button, interaction: Interaction):
+        await interaction.response.defer(ephemeral=True)
         async with get_connection() as conn:
             try:
                 cur = conn.cursor()
@@ -26,10 +28,10 @@ class CampaignView(discord.ui.View):
                 )
                 started = await cur.fetchone()
                 if started:
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         "The campaign has already started. You cannot join now.",
-                        ephemeral=True,
                         delete_after=constants.DELETE_AFTER_DELAY,
+                        ephemeral=True,
                     )
                     return
 
@@ -39,21 +41,21 @@ class CampaignView(discord.ui.View):
                         (interaction.user.id, interaction.guild.id),
                     )
                 except psycopg.errors.ForeignKeyViolation:
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         "There is no Secret Santa campaign on this server. You may create one with `/santa create <name>`.",
-                        ephemeral=True,
                         delete_after=constants.DELETE_AFTER_DELAY,
+                        ephemeral=True,
                     )
                     return
             except psycopg.errors.UniqueViolation:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "You have already joined the **Secret Santa campaign!**",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
+                    ephemeral=True,
                 )
                 return
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "You have joined the **Secret Santa campaign!**", ephemeral=True, delete_after=constants.DELETE_AFTER_DELAY
         )
         logger.info(f"User {interaction.user.global_name} joined the campaign {interaction.message.id}")
@@ -62,6 +64,7 @@ class CampaignView(discord.ui.View):
         label="Leave Secret Santa!", custom_id="leave-sss", style=discord.ButtonStyle.danger, emoji="🎄"
     )
     async def leave_button_callback(self, button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         async with get_connection() as conn:
             # if the user is the organizer, they cannot leave
             cur = conn.cursor()
@@ -72,10 +75,10 @@ class CampaignView(discord.ui.View):
             )
             is_organizer = await cur.fetchone()
             if is_organizer:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "You are the organizer. To delete the campaign, use `/santa delete`",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
+                    ephemeral=True,
                 )
                 return
 
@@ -86,10 +89,10 @@ class CampaignView(discord.ui.View):
             )
             started = await cur.fetchone()
             if started:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "The campaign has already started. You cannot leave now.",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
+                    ephemeral=True,
                 )
                 return
 
@@ -100,14 +103,14 @@ class CampaignView(discord.ui.View):
 
             result = await cur.fetchone()
 
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 (
                     "You have left the **Secret Santa campaign!**"
                     if result
                     else "You are not part of a campaign on this server!"
                 ),
-                ephemeral=True,
                 delete_after=constants.DELETE_AFTER_DELAY,
+                ephemeral=True,
             )
 
             logger.info(f"User {interaction.user.global_name} left the campaign {interaction.message.id}")
@@ -116,6 +119,8 @@ class CampaignView(discord.ui.View):
         label="Start Secret Santa!", custom_id="start-sss", style=discord.ButtonStyle.success, emoji="🎁"
     )
     async def start_button_callback(self, button, interaction: discord.Interaction):
+        await interaction.response.defer()
+
         async with get_connection() as conn:
             cur: AsyncCursor = conn.cursor()
             await cur.advisory_lock(interaction.guild.id)
@@ -131,10 +136,8 @@ class CampaignView(discord.ui.View):
                     error_message = "No members have joined a campaign or none exists!"
                 else:
                     error_message = "You need at least 3 members to start the Secret Santa campaign!"
-                await interaction.response.send_message(
-                    error_message,
-                    ephemeral=True,
-                    delete_after=constants.DELETE_AFTER_DELAY,
+                await interaction.followup.send(
+                    error_message, delete_after=constants.DELETE_AFTER_DELAY, ephemeral=True
                 )
                 return
 
@@ -146,10 +149,10 @@ class CampaignView(discord.ui.View):
 
             is_organizer = await cur.fetchone()
             if not is_organizer:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "You can only start the campaign if you are the organizer!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
+                    ephemeral=True,
                 )
                 return
 
@@ -160,10 +163,10 @@ class CampaignView(discord.ui.View):
             )
             state = await cur.fetchone()
             if state[0] != "awaiting":
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "The campaign is not in the awaiting state!",
-                    ephemeral=True,
                     delete_after=constants.DELETE_AFTER_DELAY,
+                    ephemeral=True,
                 )
                 return
 
@@ -172,9 +175,8 @@ class CampaignView(discord.ui.View):
                 (interaction.guild.id,),
             )
 
-            await interaction.response.send_message(
+            await interaction.channel.send(
                 "The Secret Santa campaign has started! Check your DMs for your giftee!",
-                ephemeral=False,
             )
 
             assignments = secret_santa_algo(members)
