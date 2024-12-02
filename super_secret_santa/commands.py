@@ -100,10 +100,19 @@ def setup():
     @santa_command_group.command()
     async def message(ctx: ApplicationContext, message: str):
         """Send a message to your giftee, whom you must get a gift for (NOT your Secret Santa)"""
+        if ctx.guild is not None:
+            await ctx.respond(
+                f"This command can only be used in a DM! Send your command in a message to {bot.user.mention}",
+                ephemeral=True,
+                delete_after=constants.DELETE_AFTER_DELAY,
+            )
+            return
+
         await ctx.defer(ephemeral=True)
         # we need to find out all started campaigns the Member is part of, where `giftee` is not NULL
         async with get_connection() as conn:
             cur = conn.cursor()
+
             await cur.execute(
                 """
                 SELECT m.guild_id, g.user_id, c.name
@@ -158,6 +167,14 @@ def setup():
     @santa_command_group.command()
     async def messagex(ctx: ApplicationContext, number: int, message: str):
         """Send a message to your giftee, whom you must get a gift for (NOT your Secret Santa)"""
+        if ctx.guild is not None:
+            await ctx.respond(
+                f"This command can only be used in a DM! Send your command in a message to {bot.user.mention}",
+                ephemeral=True,
+                delete_after=constants.DELETE_AFTER_DELAY,
+            )
+            return
+
         await ctx.defer(ephemeral=True)
         # we need to find out all started campaigns the Member is part of, where `giftee` is not NULL
         async with get_connection() as conn:

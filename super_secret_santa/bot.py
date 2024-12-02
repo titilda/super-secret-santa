@@ -1,3 +1,3 @@
 import discord
 
-bot = discord.Bot()
+bot: discord.Bot = discord.Bot()
