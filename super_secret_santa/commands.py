@@ -109,6 +109,7 @@ def setup():
             return
 
         await ctx.defer(ephemeral=True)
+        message = str(message).upper()
         # we need to find out all started campaigns the Member is part of, where `giftee` is not NULL
         async with get_connection() as conn:
             cur = conn.cursor()
@@ -176,6 +177,7 @@ def setup():
             return
 
         await ctx.defer(ephemeral=True)
+        message = str(message).upper()
         # we need to find out all started campaigns the Member is part of, where `giftee` is not NULL
         async with get_connection() as conn:
             cur = conn.cursor()
@@ -208,9 +210,7 @@ def setup():
             # send the message to the user
             user = await bot.fetch_user(campaign[1])
             try:
-                await user.send(
-                    f"Your Secret Santa in campaign **{campaign[2]}** has sent you a message:\n{message.upper()}"
-                )
+                await user.send(f"Your Secret Santa in campaign **{campaign[2]}** has sent you a message:\n{message}")
                 await ctx.followup.send(
                     "Message sent successfully!",
                     delete_after=constants.DELETE_AFTER_DELAY,
