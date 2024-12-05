@@ -17,8 +17,8 @@ def setup():
 
     @santa_command_group.command()
     async def create(ctx: ApplicationContext, campaign_name: str):
-        await ctx.defer(ephemeral=True)
         """Create a new Secret Santa campaign"""
+        await ctx.defer(ephemeral=True)
         if not ctx.guild:
             await ctx.followup.send(
                 "This command can only be used in a server!",
