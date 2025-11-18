@@ -1,20 +1,19 @@
-[tool.poetry]
+[project]
 name = "super-secret-santa"
 version = "0.1.0"
 description = ""
-authors = ["TheManchineel <37479927+TheManchineel@users.noreply.github.com>"]
+authors = [{ name = "TheManchineel", email = "37479927+TheManchineel@users.noreply.github.com" }]
+requires-python = ">=3.12,<4"
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.12"
-py-cord = "^2.6.1"
-psycopg = { extras = ["pool", "binary"], version = "^3.2.3" }
-loguru = "^0.7.2"
-svglib = "^1.5.1"
-reportlab = "^4.2.5"
-segno = "^1.6.1"
-
+dependencies = [
+    "py-cord>=2.6.1,<3",
+    "psycopg[pool, binary]>=3.2.3,<4",
+    "loguru>=0.7.2,<0.8",
+    "svglib>=1.5.1,<2",
+    "reportlab>=4.2.5,<5",
+    "segno>=1.6.1,<2",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
