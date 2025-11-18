@@ -7,4 +7,4 @@ RUN uv sync --frozen --no-cache --compile-bytecode --no-install-project
 COPY . /app/
 USER 99:100
 
-CMD ["python", "-m", "super_secret_santa"]
+CMD ["uv", "run", "-m", "super_secret_santa"]
